@@ -1,0 +1,17 @@
+[Unit]
+Description=Bet261 Analytics API + collecteur (FastAPI/uvicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# >>> Remplace __USER__ par ton utilisateur Linux (ex: ubuntu) et adapte les chemins <<<
+User=__USER__
+WorkingDirectory=/home/__USER__/bet261-backend
+# L'app lit automatiquement le fichier .env present dans WorkingDirectory.
+ExecStart=/home/__USER__/bet261-backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
