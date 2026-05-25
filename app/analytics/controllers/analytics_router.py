@@ -7,6 +7,7 @@ from app.analytics.repository.analytics_repository import AnalyticsRepository
 from app.analytics.schemas.analytics_schema import (
     BacktestResponseSchema, HealthSchema, MatchListSchema,
 )
+from app.analytics.services.head_to_head_service import HeadToHeadService
 from app.analytics.services.health_service import HealthService
 from app.analytics.services.match_stats_service import MatchStatsService
 from app.analytics.services.odds_stats_service import OddsStatsService
@@ -115,6 +116,18 @@ def streak_backtest(
 ):
     _guard(db)
     return StreakService(db).backtest(streak_len=streak, streak_type=streak_type)
+
+
+@router.get("/head-to-head", summary="Resultats par duel (A vs B) compares aux cotes")
+@api_endpoint
+def head_to_head(
+    min_matches: int = Query(5, ge=1, le=1000, description="Nb minimum d'occurrences du duel"),
+    limit: int = Query(30, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _=Depends(require_api_key),
+):
+    _guard(db)
+    return HeadToHeadService(db).analyze(min_matches=min_matches, limit=limit)
 
 
 @router.get("/matches", response_model=MatchListSchema,

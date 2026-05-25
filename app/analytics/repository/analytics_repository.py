@@ -138,6 +138,40 @@ class AnalyticsRepository:
             hist[away].append(away_res)
         return book, wld
 
+    # ----- Tete-a-tete (head-to-head) -------------------------------------- #
+    def head_to_head(self, db: Session, min_matches: int = 5):
+        """Regroupe les matchs par duel (home, away). Pour chaque duel revenu
+        au moins `min_matches` fois, agrege : victoires dom/nul/ext, proba
+        implicite domicile (1/cote '1'), et returns du pari 'domicile gagne'."""
+        od1 = {}
+        for k, od in db.execute(text(
+                "SELECT match_key, odds FROM odds WHERE market='1X2' AND selection='1'")).yield_per(BATCH):
+            od1[k] = od
+
+        agg = defaultdict(lambda: {"n": 0, "hw": 0, "dw": 0, "aw": 0,
+                                   "imp_sum": 0.0, "imp_n": 0,
+                                   "ret_sum": 0.0, "ret_sq": 0.0, "ret_n": 0})
+        cur = db.execute(text(
+            "SELECT match_key, home, away, result_1x2 FROM matches WHERE ft_score IS NOT NULL"))
+        for (mk, home, away, res) in cur.yield_per(BATCH):
+            a = agg[(home, away)]
+            a["n"] += 1
+            if res == "1":
+                a["hw"] += 1
+            elif res == "X":
+                a["dw"] += 1
+            else:
+                a["aw"] += 1
+            od = od1.get(mk)
+            if od and od > 0:
+                a["imp_sum"] += 1.0 / od
+                a["imp_n"] += 1
+                ret = (od - 1) if res == "1" else -1
+                a["ret_sum"] += ret
+                a["ret_sq"] += ret * ret
+                a["ret_n"] += 1
+        return {pair: a for pair, a in agg.items() if a["n"] >= min_matches}
+
     # ----- Sante & liste --------------------------------------------------- #
     def health(self, db: Session) -> dict:
         row = db.execute(text(
