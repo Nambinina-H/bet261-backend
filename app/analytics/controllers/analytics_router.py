@@ -10,6 +10,7 @@ from app.analytics.schemas.analytics_schema import (
 from app.analytics.services.health_service import HealthService
 from app.analytics.services.match_stats_service import MatchStatsService
 from app.analytics.services.odds_stats_service import OddsStatsService
+from app.analytics.services.streak_service import StreakService
 from app.analytics.services.timing_service import TimingService
 from app.common.decorator.api_endpoint import api_endpoint
 from app.common.dependencies import require_api_key
@@ -101,6 +102,19 @@ def backtest(
 def randomness(db: Session = Depends(get_db), _=Depends(require_api_key)):
     _guard(db)
     return MatchStatsService(db).randomness()
+
+
+@router.get("/streak-backtest", summary="Parier sur une equipe apres une serie (defaites/victoires)")
+@api_endpoint
+def streak_backtest(
+    streak: int = Query(3, ge=1, le=10, description="Longueur de la serie"),
+    streak_type: str = Query("loss", pattern="^(loss|win)$",
+                             description="Type de serie : 'loss' (defaites) ou 'win' (victoires)"),
+    db: Session = Depends(get_db),
+    _=Depends(require_api_key),
+):
+    _guard(db)
+    return StreakService(db).backtest(streak_len=streak, streak_type=streak_type)
 
 
 @router.get("/matches", response_model=MatchListSchema,

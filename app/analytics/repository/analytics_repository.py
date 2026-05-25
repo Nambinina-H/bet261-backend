@@ -105,6 +105,39 @@ class AnalyticsRepository:
             agg[0] += 1; agg[1] += 1 if won else 0; agg[2] += od; agg[3] += ret; agg[4] += ret * ret
         return calib, book, any_odds
 
+    # ----- Backtest par serie (streak) ------------------------------------- #
+    def streak_backtest(self, db: Session, streak_len: int = 3, streak_type: str = "loss"):
+        """Pour chaque equipe, parcourt ses matchs dans l'ordre chronologique.
+        Quand elle entre dans un match avec `streak_len` resultats `streak_type`
+        d'affilee (loss/win), on enregistre le pari 'cette equipe gagne ce match'
+        (avec la cote 1X2 correspondante) et l'issue reelle.
+        Renvoie (book, wld) : book=[(gagne 0/1, cote|None)], wld=compteur W/D/L."""
+        target = "L" if streak_type == "loss" else "W"
+        # cotes 1X2 par match (3 lignes/match, leger)
+        odds = {}
+        for k, sel, od in db.execute(text(
+                "SELECT match_key, selection, odds FROM odds WHERE market='1X2'")).yield_per(BATCH):
+            odds.setdefault(k, {})[sel] = od
+
+        hist = defaultdict(list)   # equipe -> ['W','D','L', ...] chronologique
+        book = []
+        wld = {"W": 0, "D": 0, "L": 0}
+        cur = db.execute(text(
+            "SELECT match_key, home, away, result_1x2 FROM matches "
+            "WHERE ft_score IS NOT NULL ORDER BY expected_start"))
+        for (mk, home, away, res) in cur.yield_per(BATCH):
+            home_res = "W" if res == "1" else ("D" if res == "X" else "L")
+            away_res = "W" if res == "2" else ("D" if res == "X" else "L")
+            for team, is_home, tres in ((home, True, home_res), (away, False, away_res)):
+                h = hist[team]
+                if len(h) >= streak_len and all(r == target for r in h[-streak_len:]):
+                    wld[tres] += 1
+                    od = odds.get(mk, {}).get("1" if is_home else "2")
+                    book.append((1 if tres == "W" else 0, od))
+            hist[home].append(home_res)
+            hist[away].append(away_res)
+        return book, wld
+
     # ----- Sante & liste --------------------------------------------------- #
     def health(self, db: Session) -> dict:
         row = db.execute(text(
